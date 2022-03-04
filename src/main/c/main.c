@@ -28,6 +28,28 @@ const unsigned char* rdo_GetResource_firmwareOM5PAN_bin(size_t* len);
 #define GetANFirmwareResource rdo_GetResource_firmwareOM5PAN_bin
 #endif
 
+int extract_and_add_firmware(GetResourceFunc resourceFunc, const char* deviceImage) {
+  size_t bufLen = 0;
+  const unsigned char* buf = resourceFunc(&bufLen);
+
+  int fd = creat(deviceImage, 0);
+  if (fd < 0) {
+    fprintf(stderr, "Failed to create %s\n", deviceImage);
+    return 1;
+  }
+
+  ssize_t written = write(fd, buf, bufLen);
+
+  if (written != (ssize_t)bufLen) {
+    close(fd);
+    fprintf(stderr, "Failed to write firmware\n");
+    return 1;
+  }
+
+  close(fd);
+  return 0;
+}
+
 int main(int argc, const char** argv) {
   if (geteuid() != 0) {
     while (true) {
@@ -70,45 +92,35 @@ int main(int argc, const char** argv) {
     usleep(20000);
   }
 
-  fprintf(stdout, "Detecting Device\n");
-
-  // Detect device type
-
-  GetResourceFunc resourceFunc = GetACFirmwareResource;
-
-
-  fprintf(stdout, "Extracting Firmware\n");
-
-  size_t bufLen = 0;
-  const unsigned char* buf = resourceFunc(&bufLen);
-
-  const char* deviceImage = "/tmp/firmware.bin";
-  int fd = creat(deviceImage, 0);
-  if (fd < 0) {
-    fprintf(stderr, "Failed to create %s\n", deviceImage);
-  }
-
-  ssize_t written = write(fd, buf, bufLen);
-
-  if (written != (ssize_t)bufLen) {
-    close(fd);
-    printf("Failed to write firmware\n");
+  fprintf(stdout, "Extracting Firmware for AN Router\n");
+  const char* anDeviceImage = "/tmp/firmwarean.bin";
+  if (extract_and_add_firmware(GetANFirmwareResource, anDeviceImage)) {
     return 1;
   }
 
-  close(fd);
+  fprintf(stdout, "Extracting Firmware for AC Router\n");
+  const char* acDeviceImage = "/tmp/firmwareac.bin";
+  if (extract_and_add_firmware(GetACFirmwareResource, acDeviceImage)) {
+    return 1;
+  }  
 
   fprintf(stdout, "Checking Firmware\n");
 
   router_images_init();
 
-  int ret = router_images_verify_path(deviceImage);
-  if (ret >= 0) {
-    fprintf(stdout, "Found Correct Firmware\n");
-  } else {
-    fprintf(stdout, "Failed to load firmware\n");
+  int ret = router_images_verify_path(acDeviceImage);
+  if (ret < 0) {
+    fprintf(stderr, "Failed to load ac firmware\n");
     return 1;
   }
+
+  ret = router_images_verify_path(anDeviceImage);
+  if (ret < 0) {
+    fprintf(stderr, "Failed to load an firmware\n");
+    return 1;
+  }
+
+  fprintf(stdout, "Firmware validated\n");
 
   fprintf(stdout, "Flashing!\n");
 
