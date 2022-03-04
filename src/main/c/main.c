@@ -10,11 +10,11 @@
 #include <stdio.h>
 #include <fcntl.h>
 
-#include "hal/HAL.h"
-
 const char* interfaceName = "eth0";
 
 typedef const unsigned char* (*GetResourceFunc)(size_t* len);
+int RDO_InitializeButton(void);
+int RDO_GetButton(void);
 
 #ifdef ISRAEL
 const unsigned char* rdo_GetResource_firmwareOM5PACIsrael_bin(size_t* len);
@@ -31,7 +31,7 @@ const unsigned char* rdo_GetResource_firmwareOM5PAN_bin(size_t* len);
 int main(int argc, const char** argv) {
   if (geteuid() != 0) {
     while (true) {
-      execlp("/usr/local/frc/bin/frcKillRobot.sh", "-t", NULL);
+      fprintf(stderr, "You must run this program as admin (roborio) or root (pi)\n");
       sleep(1);
     }
   }
@@ -42,15 +42,12 @@ int main(int argc, const char** argv) {
     skipButton = true;
   }
 
-  fprintf(stdout, "Starting\n");
-  if (!HAL_Initialize(500, 0)) {
-    printf("Failed to initialize HAL\n");
+  if (!skipButton && !RDO_InitializeButton()) {
+    fprintf(stderr, "Failed to initialize button\n");
     return 1;
   }
 
   fprintf(stdout, "Started\n");
-
-  sleep(1);
 
   fprintf(stdout, "Welcome to the roboRIO Radio Firmware Updater\n");
 
@@ -67,8 +64,7 @@ int main(int argc, const char** argv) {
       fprintf(stdout, "Waiting for User Button Press\n");
       counter = 0;
     }
-    int32_t status = 0;
-    if (HAL_GetFPGAButton(&status)) {
+    if (RDO_GetButton()) {
       break;
     }
     usleep(20000);

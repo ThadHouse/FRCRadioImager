@@ -76,6 +76,7 @@ model {
             sources.cpp {
                 source {
                     srcDirs "src/main/cpp", "$buildDir/generated/firmware"
+                    include '**/*.cpp'
                 }
             }
 
@@ -107,6 +108,7 @@ model {
             sources.cpp {
                 source {
                     srcDirs "src/main/cpp", "$buildDir/generated/israelfirmware"
+                    include '**/*.cpp'
                 }
             }
 
