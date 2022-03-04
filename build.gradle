@@ -1,0 +1,135 @@
+plugins {
+    id "c"
+    id "cpp"
+    id "google-test-test-suite"
+    id "edu.wpi.first.GradleRIO" version "2022.4.1"
+}
+
+// Define my targets (RoboRIO) and artifacts (deployable files)
+// This is added by GradleRIO's backing project DeployUtils.
+deploy {
+    targets {
+        roborio(getTargetTypeClass('RoboRIO')) {
+            // Team number is loaded either from the .wpilib/wpilib_preferences.json
+            // or from command line. If not found an exception will be thrown.
+            // You can use getTeamOrDefault(team) instead of getTeamNumber if you
+            // want to store a team number in this file.
+            team = project.frc.getTeamNumber()
+            debug = project.frc.getDebugOrDefault(false)
+
+            artifacts {
+                // First part is artifact name, 2nd is artifact type
+                // getTargetTypeClass is a shortcut to get the class type using a string
+
+                frcCpp(getArtifactTypeClass('FRCNativeArtifact')) {
+                }
+
+                // Static files artifact
+                frcStaticFileDeploy(getArtifactTypeClass('FileTreeArtifact')) {
+                    files = project.fileTree('src/main/deploy')
+                    directory = '/home/lvuser/deploy'
+                }
+            }
+        }
+    }
+}
+
+def deployArtifact = deploy.targets.roborio.artifacts.frcCpp
+
+// Set this to true to enable desktop support.
+def includeDesktopSupport = false
+
+// Set to true to run simulation in debug mode
+wpi.cpp.debugSimulation = false
+
+nativeUtils.withRaspbian()
+
+nativeUtils.platformConfigs.each {
+    it.cCompiler.args.add('-D_GNU_SOURCE')
+    it.cCompiler.args.add('-std=gnu11')
+    it.cCompiler.args.add('-fno-strict-aliasing')
+    it.cCompiler.args.add('-DLINUX')
+    it.cppCompiler.args.add('-DLINUX')
+}
+
+def generateTask = nativeUtils.generateResources('generateResources').get()
+generateTask.outputDirectory = project.file('build/generated/firmware')
+generateTask.namespace = 'rdo'
+generateTask.source.from("$projectDir/resources/nonisrael")
+
+def generateTaskIsrael = nativeUtils.generateResources('generateResourcesIsrael').get()
+generateTaskIsrael.outputDirectory = project.file('build/generated/israelfirmware')
+generateTaskIsrael.namespace = 'rdo'
+generateTaskIsrael.source.from("$projectDir/resources/israel")
+
+tasks.withType(AbstractNativeCompileTask) {
+    dependsOn generateTask
+    dependsOn generateTaskIsrael
+}
+
+model {
+    components {
+        radioFirmwareSetter(NativeExecutableSpec) {
+            targetPlatform wpi.platforms.roborio
+            targetPlatform wpi.platforms.raspbian
+
+            sources.cpp {
+                source {
+                    srcDirs "src/main/cpp", "$buildDir/generated/firmware"
+                }
+            }
+
+            sources.c {
+                source {
+                    srcDir 'ap51-flash'
+                    srcDir 'src/main/c'
+                    include '**/*.c'
+                    exclude 'commandline.c'
+                }
+                exportedHeaders {
+                    srcDir 'ap51-flash'
+                }
+            }
+
+            // Set deploy task to deploy this component
+            deployArtifact.component = it
+
+            // Enable run tasks for this component
+            wpi.cpp.enableExternalTasks(it)
+
+            wpi.cpp.deps.wpilibStatic(it)
+        }
+
+        radioFirmwareSetterIsrael(NativeExecutableSpec) {
+            targetPlatform wpi.platforms.roborio
+            targetPlatform wpi.platforms.raspbian
+
+            sources.cpp {
+                source {
+                    srcDirs "src/main/cpp", "$buildDir/generated/israelfirmware"
+                }
+            }
+
+            sources.c {
+                source {
+                    srcDir 'ap51-flash'
+                    srcDir 'src/main/c'
+                    include '**/*.c'
+                    exclude 'commandline.c'
+                }
+                exportedHeaders {
+                    srcDir 'ap51-flash'
+                }
+            }
+
+            binaries.all {
+                it.cCompiler.args.add('-DISRAEL')
+            }
+
+            // Enable run tasks for this component
+            wpi.cpp.enableExternalTasks(it)
+
+            wpi.cpp.deps.wpilibStatic(it)
+        }
+    }
+}
