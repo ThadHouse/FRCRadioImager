@@ -126,7 +126,7 @@ int main(int argc, const char** argv) {
 
   ret = flash_start(interfaceName);
 
-  if (ret != 0) {
+  if (!ret) {
     fprintf(stdout, "Flash Failed\n");
     return 1;
   } else {
